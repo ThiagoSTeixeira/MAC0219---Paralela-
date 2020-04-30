@@ -1,10 +1,19 @@
+/*
+| Nome | NUSP |
+|------|------|
+| Caio Andrade | 9797232 |
+| Caio Fontes | 10692061 |
+| Eduardo Laurentino | 8988212 |
+| Thiago Teixeira | 10736987 |
+| Washington Meireles | 10737157 |
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <math.h>
 #include <pthread.h>
 #include <time.h>
-#include <unistd.h>
 #include <sys/time.h>
 
 #ifndef DEBUG
@@ -48,12 +57,11 @@ struct function functions[] = {
 // Your thread data structures go here
 
 struct thread_data{
-    int id;
-    int start;
-    int stop;
-    long double (*func)(long double);
-    long double* samples;
-    long double result;
+    int thread_id,
+    	sample_begin,
+    	sample_end;    
+    long double *sample, *result; 
+    long double (*f)(long double);
 };
 
 struct thread_data *thread_data_array;
@@ -96,41 +104,43 @@ void print_array(long double *sample, int size){
 
 long double monte_carlo_integrate(long double (*f)(long double), long double *samples, int size){
     // Your sequential code goes here
-    long double acc = 0.0;
-    int i;
-    for(i = 0; i < size; i++) {
-        acc += f(samples[i]);
+    long double accumulator = 0;
+    //long double result;
+
+    for (int i = 0; i < size; i++){
+        accumulator += f(samples[i]);   
     }
 
-    return (acc/size);
+    //result = accumulator/size;
+    return accumulator/size;
 }
 
 void *monte_carlo_integrate_thread(void *args){
     // Your pthreads code goes here
-    // Essa função é o procedimento que é chamado pra cada thread.
-    // Cada thread deve ser capaz de : 
-    /*
-    1) Invocar a função f
-    2) Com isso, deve ter acesso ao vetor de amostras
-    3) Deve possuir um acumulador
-    4) Um id da thread (Isso é útil pra gente conseguir dar join
-        nessa thread em questão).
-    5) Qual a porção da amostra que a thread deve trabalhar - check
-    */
+
     struct thread_data *my_data;
-    int start, stop, i;
-    long double* samples;
-    long double result;
-    my_data = (struct thread_data *)args;
-    samples = my_data->samples;
-    result = 0.0;
-    start = my_data->start;
-    stop = my_data->stop;
-    for(i = start; i < stop; i++) {
-        result += my_data->func(samples[i]);
-    }
-    my_data->result = result;
-    pthread_exit(NULL);
+    int task_id, sample_begin, sample_end;
+    long double (*function)(long double);
+    long double accumulator = 0;    
+    long double *t_sample, *t_result;
+
+
+    my_data = (struct thread_data *) args;
+    task_id = my_data->thread_id;
+    function = my_data->f;
+    sample_begin = my_data->sample_begin;
+    sample_end = my_data->sample_end;
+    t_sample = my_data->sample;
+    t_result = my_data->result;
+
+    for(int i = sample_begin; i < sample_end; i++)
+        accumulator += function(t_sample[i]);
+    
+
+    t_result[task_id] = accumulator;
+
+    pthread_exit((void *)task_id);
+    //return 0;
 }
 
 int main(int argc, char **argv){
@@ -193,50 +203,62 @@ int main(int argc, char **argv){
         gettimeofday(&timer.v_start, NULL);
 
         // Your pthreads code goes here
-        int i;
+        int error_code, t, i_start, i_end, step; 
+
+        //memory allocation
+        results = malloc((n_threads) * sizeof(long double));
+        thread_data_array = malloc(n_threads * sizeof(struct thread_data));
+
+        pthread_t threads[n_threads];
         pthread_attr_t attr;
         pthread_attr_init(&attr);
         pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-        pthread_t thread[n_threads];
-        int step;
-        step = size / n_threads;
-        int start, stop;
-        start = 0;
-        stop = step - 1; //[start, stop)
-        thread_data_array = malloc(sizeof(struct thread_data) * n_threads);
-        // criação das threads
-        long double* sample = uniform_sample(target_function.interval,samples,size);
-        for(i = 0; i < n_threads; i++) {
-            thread_data_array[i].id = i;
-            thread_data_array[i].start = start;
-            thread_data_array[i].stop = stop;
-            thread_data_array[i].func = target_function.f;
-            thread_data_array[i].samples = sample;
 
-            pthread_create(
-                &thread[i], 
-                &attr,
-                monte_carlo_integrate_thread, 
-                (void *) &thread_data_array[i]
-            );
-            start = stop;
-            if(stop + step <= size)
-                stop += step;
-            else
-                stop = size;
+        //sampling
+        samples = uniform_sample(target_function.interval, samples, size);
+
+        step = size/n_threads;
+        i_start = 0;
+        i_end = i_start + step;
+
+        for(t = 0; t < n_threads; t++){
+            thread_data_array[t].thread_id = t;
+            thread_data_array[t].f = target_function.f;
+            thread_data_array[t].sample_begin = i_start; //inclusive
+            thread_data_array[t].sample_end = i_end; //exclusive
+            thread_data_array[t].sample = samples;
+            thread_data_array[t].result = results;
+
+            error_code = pthread_create(&threads[t], &attr, 
+                                        monte_carlo_integrate_thread, (void *) &thread_data_array[t]);
+
+            if (error_code){
+                printf("ERROR; return code from pthread_create() is %d\n", error_code);
+                exit(-1);
+            } 
+
+            // update intervals
+            i_start = i_end;
+            i_end = (i_end + step >= size) ? size - 1 : i_end + step;  
         }
+
         pthread_attr_destroy(&attr);
 
-        // execução das threads
-        int rc;
-        long double acc = 0.0;
-        void* status;
-        for(i = 0; i < n_threads; i++) {
-            rc = pthread_join(thread[i], &status);
-            acc += thread_data_array[i].result;
-        }
-        estimate = acc/size;
-        free(thread_data_array);
+        //join loop
+        for(t = 0; t < n_threads; t++){
+            error_code = pthread_join(threads[t], NULL);
+            if(error_code){
+                printf("ERROR; return code from pthread_join() is %d\n", error_code);
+                exit(-1);
+            };
+        };
+
+        //sum results
+        estimate = 0.0;
+        for(t = 0; t < n_threads; t++)
+        	estimate += results[t];        
+        estimate /= size;
+
         // Your pthreads code ends here
 
         timer.c_end = clock();
