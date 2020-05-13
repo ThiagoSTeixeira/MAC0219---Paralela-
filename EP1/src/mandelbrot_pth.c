@@ -3,6 +3,8 @@
 #include <math.h>
 #include <pthread.h>
 
+#define min(x, y) (x < y ? x : y);
+
 struct thread_args
 {
     int start_y;
@@ -157,9 +159,6 @@ void *compute_mandelbrot(void *args)
     int end_x = my_args->end_x;
     int tid = my_args->tid;
 
-    printf("thread: %d\nstart_x : %d\t end_x: %d\nstart_y: %d\tend_y: %d",
-           tid, start_x, end_x, start_y, end_y);
-
     for (i_y = start_y; i_y < end_y; i_y++)
     {
         c_y = c_y_min + i_y * pixel_height;
@@ -195,8 +194,40 @@ void *compute_mandelbrot(void *args)
         };
     };
 
-    pthread_exit((void *)tid);
+    pthread_exit(NULL);
 };
+
+void init_thread_data(struct thread_args *t_data)
+{
+    long t = 0;
+    int ver_quadrant_size, hor_quadrant_size, lin, col;
+
+    ver_quadrant_size = image_size / (int)sqrt(n_threads);
+    hor_quadrant_size = image_size / (int)((double)n_threads / sqrt(n_threads));
+
+    for (lin = 0; lin < image_size; lin += ver_quadrant_size)
+    {
+        for (col = 0; col < image_size; col += hor_quadrant_size)
+        {
+            t_data[t].start_x = col;
+            t_data[t].end_x = min(col + hor_quadrant_size, image_size);
+            t_data[t].start_y = lin;
+            t_data[t].end_y = min(lin + ver_quadrant_size, image_size);
+            t_data[t].tid = t;
+            t += 1;
+            if (t == n_threads - 1) // last thread takes the rest of the pixels
+            {
+                t_data[t].start_x = col;
+                t_data[t].end_x = image_size;
+                t_data[t].start_y = lin;
+                t_data[t].end_y = min(lin + ver_quadrant_size, image_size);
+                t_data[t].tid = t;
+
+                return;
+            }
+        }
+    }
+}
 
 void compute_mandelbrot_threads()
 {
@@ -216,16 +247,10 @@ void compute_mandelbrot_threads()
 
     x_ini = y_ini = 0;
     x_end = x_step = i_x_max / n_threads;
-    y_end = y_step = i_y_max / n_threads;
+    init_thread_data(thread_data);
 
     for (t = 0; t < n_threads; t++)
     {
-        thread_data[t].tid = t;
-        thread_data[t].start_x = x_ini;
-        thread_data[t].start_y = y_ini;
-        thread_data[t].end_x = x_end;
-        thread_data[t].end_y = y_end;
-
         rc = pthread_create(&thread[t], &attr, compute_mandelbrot, (void *)&thread_data[t]);
         if (rc)
         {
@@ -251,8 +276,6 @@ void compute_mandelbrot_threads()
             printf("ERROR; return code from pthread_join() is %d\n", err_code);
             exit(-1);
         };
-        printf("Main: completed join with thread %ld having a status of %ld\n",
-               t, (long)status);
     };
 };
 
