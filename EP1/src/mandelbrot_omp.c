@@ -1,7 +1,21 @@
+#define _POSIX_C_SOURCE 199309L
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <omp.h>
+#include <time.h>
+#include <sys/time.h>
+
+struct timer_info {
+    clock_t c_start;
+    clock_t c_end;
+    struct timespec t_start;
+    struct timespec t_end;
+    struct timeval v_start;
+    struct timeval v_end;
+};
+
+struct timer_info timer;
 
 #define CHUNKSIZE 10
 #define THREADS 32
@@ -57,7 +71,15 @@ int main(int argc, char *argv[])
 
 	//allocate_image_buffer();
 
+	timer.c_start = clock();
+    clock_gettime(CLOCK_MONOTONIC, &timer.t_start);
+    gettimeofday(&timer.v_start, NULL);
+
 	compute_mandelbrot();
+
+    timer.c_start = clock();
+    clock_gettime(CLOCK_MONOTONIC, &timer.t_start);
+    gettimeofday(&timer.v_start, NULL);
 
 	//write_to_file();
 

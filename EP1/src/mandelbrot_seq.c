@@ -1,6 +1,20 @@
+#define _POSIX_C_SOURCE 199309L
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <time.h>
+#include <sys/time.h>
+
+struct timer_info {
+    clock_t c_start;
+    clock_t c_end;
+    struct timespec t_start;
+    struct timespec t_end;
+    struct timeval v_start;
+    struct timeval v_end;
+};
+
+struct timer_info timer;
 
 double c_x_min;
 double c_x_max;
@@ -178,9 +192,21 @@ int main(int argc, char *argv[])
 
     allocate_image_buffer();
 
+    timer.c_start = clock();
+    clock_gettime(CLOCK_MONOTONIC, &timer.t_start);
+    gettimeofday(&timer.v_start, NULL);
+
     compute_mandelbrot();
 
+    timer.c_end = clock();
+    clock_gettime(CLOCK_MONOTONIC, &timer.t_end);
+    gettimeofday(&timer.v_end, NULL);
+
     write_to_file();
+    printf("%f\n",
+        (double) (timer.t_end.tv_sec - timer.t_start.tv_sec) +
+        (double) (timer.t_end.tv_nsec - timer.t_start.tv_nsec) / 1000000000.0);
+
 
     return 0;
 };
