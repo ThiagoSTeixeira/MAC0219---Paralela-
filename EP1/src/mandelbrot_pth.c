@@ -311,5 +311,9 @@ int main(int argc, char *argv[])
 
     //write_to_file();
 
+    printf("%f\n",
+        (double) (timer.t_end.tv_sec - timer.t_start.tv_sec) +
+        (double) (timer.t_end.tv_nsec - timer.t_start.tv_nsec) / 1000000000.0);
+
     return 0;
 };
