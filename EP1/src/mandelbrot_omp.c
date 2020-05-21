@@ -77,9 +77,9 @@ int main(int argc, char *argv[])
 
 	compute_mandelbrot();
 
-    timer.c_start = clock();
-    clock_gettime(CLOCK_MONOTONIC, &timer.t_start);
-    gettimeofday(&timer.v_start, NULL);
+    timer.c_end = clock();
+    clock_gettime(CLOCK_MONOTONIC, &timer.t_end);
+    gettimeofday(&timer.v_end, NULL);
 
 	//write_to_file();
 	printf("%f\n",
