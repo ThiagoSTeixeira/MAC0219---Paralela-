@@ -1,8 +1,13 @@
+//Compilar com: nvcc -gencode arch=compute_50,code=[sm_50,compute_50] mandelbrot_cuda.cu -o mandelbrot -Wno-deprecated-gpu-targets
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
 #include <sys/time.h>
+
+
+#define MAX_THREADS_PER_BLOCK 512
 
 double c_x_min;
 double c_x_max;
@@ -15,47 +20,40 @@ double pixel_height;
 int iteration_max = 200;
 
 int image_size;
-unsigned char **image_buffer;
-unsigned char **dev_image_buffer;
+unsigned char *image_buffer_red;
+unsigned char *image_buffer_green;
+unsigned char *image_buffer_blue;
+unsigned char *dev_image_buffer_red;
+unsigned char *dev_image_buffer_blue;
+unsigned char *dev_image_buffer_green;
+
+
+unsigned char **pixels;
+
 
 int i_x_max;
 int i_y_max;
 int image_buffer_size;
 
 int gradient_size = 16;
-int colors[17][3] = {
-    {66, 30, 15},
-    {25, 7, 26},
-    {9, 1, 47},
-    {4, 4, 73},
-    {0, 7, 100},
-    {12, 44, 138},
-    {24, 82, 177},
-    {57, 125, 209},
-    {134, 181, 229},
-    {211, 236, 248},
-    {241, 233, 191},
-    {248, 201, 95},
-    {255, 170, 0},
-    {204, 128, 0},
-    {153, 87, 0},
-    {106, 52, 3},
-    {16, 16, 16},
-};
-
-int **dev_colors;
+int color_red[17]   = {66, 25, 9, 4, 0, 12, 24, 57, 134, 211, 241, 248, 255, 204, 153, 106, 16};
+int color_green[17] = {30, 7, 1, 4, 7, 44, 82, 125, 181, 236, 233, 201, 170, 128, 87, 52, 16};
+int color_blue[17]  = {15, 26, 47, 73, 100, 138, 177, 209, 229, 248, 191, 95, 0, 0, 0, 3, 16};
+int *dev_color_red;
+int *dev_color_green;
+int *dev_color_blue;
 
 void allocate_image_buffer()
 {
-	int rgb_size = 3;
-    image_buffer = (unsigned char **)malloc(sizeof(unsigned char *) * image_buffer_size);
-    cudaMalloc((unsigned char **)&dev_image_buffer, sizeof(unsigned char *) * image_buffer_size);
+	//int rgb_size = 3;
+    image_buffer_red = (unsigned char *)malloc(sizeof(unsigned char) * image_buffer_size);
+    cudaMalloc((void**)&dev_image_buffer_red, image_buffer_size * sizeof(unsigned char));
 
-    for (int i = 0; i < image_buffer_size; i++)
-    {
-        image_buffer[i] = (unsigned char *)malloc(sizeof(unsigned char) * rgb_size);
-        cudaMalloc((unsigned char *)&dev_image_buffer[i], sizeof(unsigned char) * rgb_size);
-    };
+    image_buffer_green = (unsigned char *)malloc(sizeof(unsigned char) * image_buffer_size);
+    cudaMalloc((void**)&dev_image_buffer_green, image_buffer_size * sizeof(unsigned char));
+
+    image_buffer_blue = (unsigned char *)malloc(sizeof(unsigned char) * image_buffer_size);
+    cudaMalloc((void**)&dev_image_buffer_blue, image_buffer_size * sizeof(unsigned char));
 };
 
 void init(int argc, char *argv[])
@@ -89,21 +87,38 @@ void init(int argc, char *argv[])
 
 void init_colors(){
 
-	cudaMalloc((int**)&dev_colors, sizeof(int *) * 17);
-    for (int i = 0; i < 17; i++)
-    {
-    	cudaMalloc((int *)&dev_colors[i], sizeof(int) * 3);
-    }
+    int color_size = 17 * sizeof(int);
+    cudaMalloc((void**)&dev_color_red, color_size);
+    cudaMalloc((void**)&dev_color_green, color_size);
+    cudaMalloc((void**)&dev_color_blue, color_size);
 
-    cudaMemcpy(dev_colors, colors, sizeof(int *) * 17, cudaMemcpyHostToDevice);
+    cudaMemcpy(dev_color_red, color_red, color_size, cudaMemcpyHostToDevice);
+    cudaMemcpy(dev_color_green, color_green, color_size, cudaMemcpyHostToDevice);
+    cudaMemcpy(dev_color_blue, color_blue, color_size, cudaMemcpyHostToDevice);
 }
 
+void allocate_pixels(){
+    int rgb_size = 3;
+    pixels = (unsigned char **) malloc(sizeof(unsigned char *) * image_buffer_size);
+
+    for(int i = 0; i < image_buffer_size; i++){
+        pixels[i] = (unsigned char *) malloc(sizeof(unsigned char) * rgb_size);
+    };
+}
+
+void set_pixels(){
+    for(int i = 0; i < image_buffer_size; i++){
+        pixels[i][0] = image_buffer_red[i];
+        pixels[i][1] = image_buffer_green[i];
+        pixels[i][2] = image_buffer_blue[i];
+    }
+}
 
 void write_to_file()
 {
     FILE *file;
-    char *filename = "output.ppm";
-    char *comment = "# ";
+    const char *filename = "output.ppm";
+    const char *comment = "# ";
 
     int max_color_component_value = 255;
 
@@ -112,42 +127,48 @@ void write_to_file()
     fprintf(file, "P6\n %s\n %d\n %d\n %d\n", comment,
             i_x_max, i_y_max, max_color_component_value);
 
-    for (int i = 0; i < image_buffer_size; i++)
-    {
-        fwrite(image_buffer[i], 1, 3, file);
+
+    for(int i = 0; i < image_buffer_size; i++){
+        fwrite(pixels[i], 1 , 3, file);
     };
 
     fclose(file);
 };
 
-__device__ void update_rgb_buffer(int iteration, int iteration_max, int x, int y, int i_y_max, unsigned char **image_buffer, int **colors)
+__device__ void update_rgb_buffer(int iteration, int x, int y, int image_size, 
+                                  unsigned char *image_buffer_red, unsigned char *image_buffer_green, unsigned char *image_buffer_blue,
+                                  int *color_red, int *color_green, int *color_blue)
 {
-    int color;
+
     int gradient_size = 16;
+    int iteration_max = 200;
+    int color;
 
     if (iteration == iteration_max)
     {
-        image_buffer[(i_y_max * y) + x][0] = colors[gradient_size][0];
-        image_buffer[(i_y_max * y) + x][1] = colors[gradient_size][1];
-        image_buffer[(i_y_max * y) + x][2] = colors[gradient_size][2];
+        image_buffer_red[(image_size * y) + x] = color_red[gradient_size];
+        image_buffer_green[(image_size * y) + x] = color_green[gradient_size];
+        image_buffer_blue[(image_size * y) + x] = color_blue[gradient_size];
     }
+
     else
     {
         color = iteration % gradient_size;
 
-        image_buffer[(i_y_max * y) + x][0] = colors[color][0];
-        image_buffer[(i_y_max * y) + x][1] = colors[color][1];
-        image_buffer[(i_y_max * y) + x][2] = colors[color][2];
+        image_buffer_red[(image_size * y) + x] = color_red[color];
+        image_buffer_green[(image_size * y) + x] = color_green[color];
+        image_buffer_blue[(image_size * y) + x] = color_blue[color];
     };
 };
 
 
-__device__ int mandelbrot(double c_x, double c_y, int iteration_max) {
+__device__ int mandelbrot(double c_x, double c_y) {
     double z_x = 0;
     double z_y = 0;
     double z_x_squared = 0;
     double z_y_squared = 0;
     double escape_radius_squared = 4;
+    int iteration_max = 200;
 
     int iteration;
 
@@ -165,40 +186,39 @@ __device__ int mandelbrot(double c_x, double c_y, int iteration_max) {
     return iteration;
 }
 
-__global__ void compute_mandelbrot(unsigned char **image_buffer, double c_x_min, double c_y_min, double pixel_width, 
-                                    double pixel_height, int iteration_max, int i_y_max, int image_size, int **colors){
 
-    int dim = image_size;
 
-    int pix_per_thread = dim * dim / (gridDim.x * blockDim.x);
+__global__ void compute_mandelbrot(unsigned char *image_buffer_red, unsigned char *image_buffer_green, unsigned char *image_buffer_blue, 
+                                    double c_x_min, double c_y_min, double pixel_width, double pixel_height, int image_size, int fator,
+                                    int *color_red, int *color_green, int *color_blue){
 
-    int thread_id = blockDim.x * blockIdx.x + threadIdx.x;
-    int movement = pix_per_thread * thread_id;
 
+    int i_x;
+    int i_y;
     int iteration;
+    int dev_MAX_THREADS_PER_BLOCK = blockDim.x;
 
-    for (int i = movement; i < movement + pix_per_thread; i++){
-        int i_x = i % dim;
-        int i_y = i / dim;
-        double c_x = c_x_min + i_x * pixel_width;
-        double c_y = c_y_min + i_y * pixel_height;
+    double parametro = blockIdx.x % fator;
 
-        iteration = mandelbrot(c_x, c_y, iteration_max);
-        update_rgb_buffer(iteration, iteration_max, i_x, i_y, i_y_max, image_buffer, colors);
-
+    if (parametro == 0){
+        i_x = threadIdx.x;
+    }
+    else{
+        i_x = threadIdx.x + parametro*dev_MAX_THREADS_PER_BLOCK;
     }
 
-    if (gridDim.x * blockDim.x * pix_per_thread < dim * dim
-            && thread_id < (dim * dim) - (blockDim.x * gridDim.x)){
-        int i = blockDim.x * gridDim.x * pix_per_thread + thread_id;
-        int i_x = i % dim;
-        int i_y = i / dim;
-        double c_x = c_x_min + i_x * pixel_width;
-        double c_y = c_y_min + i_y * pixel_height;
+    i_y = (int)(blockIdx.x/fator);
 
-        iteration = mandelbrot(c_x, c_y, iteration_max);
-        update_rgb_buffer(iteration, iteration_max, i_x, i_y, i_y_max, image_buffer, colors);
-    }
+
+    double c_y = c_y_min + i_y * pixel_height;
+    if(fabs(c_y) < pixel_height / 2){
+                c_y = 0.0;
+    };
+
+    double c_x = c_x_min + i_x * pixel_width;
+
+    iteration = mandelbrot(c_x, c_y);
+    update_rgb_buffer(iteration, i_x, i_y, image_size, image_buffer_red, image_buffer_green, image_buffer_blue, color_red, color_green, color_blue);
 }
 
 int main(int argc, char *argv[])
@@ -209,11 +229,35 @@ int main(int argc, char *argv[])
 
     init_colors();
 
-    dim3 numBlocks(image_size, image_size);
+    int BLOCK_DIM = image_size;
+    int N = image_size;
 
-    compute_mandelbrot <<<image_size,image_size>>>(dev_image_buffer, c_x_min, c_y_min, pixel_width, pixel_height, iteration_max, i_y_max, image_size, dev_colors);
+    dim3 dimBlock(BLOCK_DIM, BLOCK_DIM, 1);
+    dim3 dimGrid((int)ceil(N/dimBlock.x),(int)ceil(N/dimBlock.y), 1);
 
-    cudaMemcpy(image_buffer, dev_image_buffer, sizeof(unsigned char *) * image_buffer_size, cudaMemcpyDeviceToHost);
+    printf("%d\n", dimBlock.y);
+
+    int fator = image_size/MAX_THREADS_PER_BLOCK;
+    int num_blocos = fator * image_size;
+
+    compute_mandelbrot <<<num_blocos, MAX_THREADS_PER_BLOCK>>>(dev_image_buffer_red, dev_image_buffer_green, dev_image_buffer_blue, 
+                                                    c_x_min, c_y_min, pixel_width, pixel_height, image_size, fator,
+                                                    dev_color_red, dev_color_green, dev_color_blue);
+
+    cudaMemcpy(image_buffer_red, dev_image_buffer_red, sizeof(unsigned char) * image_buffer_size, cudaMemcpyDeviceToHost);
+    cudaMemcpy(image_buffer_green, dev_image_buffer_green, sizeof(unsigned char) * image_buffer_size, cudaMemcpyDeviceToHost);
+    cudaMemcpy(image_buffer_blue, dev_image_buffer_blue, sizeof(unsigned char) * image_buffer_size, cudaMemcpyDeviceToHost);
+
+    cudaFree(dev_color_red);
+    cudaFree(dev_color_green);
+    cudaFree(dev_color_blue);
+
+    allocate_pixels();
+    set_pixels();
+
+    cudaFree(dev_image_buffer_red);
+    cudaFree(dev_image_buffer_green);
+    cudaFree(dev_image_buffer_blue);
 
     write_to_file();
 
