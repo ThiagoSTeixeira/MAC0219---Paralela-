@@ -240,7 +240,9 @@ void compute_mandelbrot_ompi(int argc, char *argv[]) {
   MPI_Type_commit(&mpi_process_data_type);
 
   if (rank_process == 0) {
-    init(argc, argv);
+    /* Process 0 will be a master process. It defines the ammount of work each process
+    needs to execute and then sends the data that each process will work on*/
+    init();
     allocate_image_buffer();
 
     struct process_args *process_data;
@@ -258,6 +260,7 @@ void compute_mandelbrot_ompi(int argc, char *argv[]) {
 
       // if tag value is 1 then some process have finished
       if (status.MPI_TAG == 1) {
+        printf("Work done\n");
         int work_done;
         MPI_Recv(&work_done, 1, MPI_INT, status.MPI_SOURCE, 1, MPI_COMM_WORLD,
                  MPI_STATUS_IGNORE);
@@ -266,10 +269,11 @@ void compute_mandelbrot_ompi(int argc, char *argv[]) {
         int buffer[3];
         MPI_Recv(&buffer, 3, MPI_INT, status.MPI_SOURCE, 0, MPI_COMM_WORLD,
                  MPI_STATUS_IGNORE);
-        printf("%d, %d, %d\n", buffer[0], buffer[1], buffer[2]);
+        //printf("%d, %d, %d\n", buffer[0], buffer[1], buffer[2]);
         update_rgb_buffer(buffer[0], buffer[1], buffer[2]);
       }
     }
+    printf('Vou escrever no arquivo!!!\n');
     write_to_file();
 
   } else {
@@ -285,7 +289,7 @@ void compute_mandelbrot_ompi(int argc, char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
-  printf("aaa\n");
+  //printf("aaa\n");
   compute_mandelbrot_ompi(argc, argv);
   return 0;
 };
