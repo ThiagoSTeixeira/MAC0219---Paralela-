@@ -5,6 +5,7 @@
 #include "mpi.h"
 
 #define min(x, y) (x < y ? x : y);
+#define MASTER 0
 
 struct process_args {
   int start_y;
@@ -147,7 +148,7 @@ void compute_mandelbrot(struct process_args *process_data) {
       };
 
       int buffer[3] = {iteration, i_x, i_y};
-      MPI_Send(&buffer, 3, MPI_INT, 0, 0, MPI_COMM_WORLD);
+      MPI_Send(&buffer, 3, MPI_INT, MASTER, 0, MPI_COMM_WORLD);
     };
   };
 };
@@ -278,7 +279,7 @@ void compute_mandelbrot_ompi(int argc, char *argv[]) {
 
   } else {
     struct process_args *process_data = malloc(sizeof(struct process_args));
-    MPI_Recv(process_data, 1, mpi_process_data_type, 0, 0, MPI_COMM_WORLD,
+    MPI_Recv(process_data, 1, mpi_process_data_type, MASTER, 0, MPI_COMM_WORLD,
              MPI_STATUS_IGNORE);
     compute_mandelbrot(process_data);
     int work_done = 1;
