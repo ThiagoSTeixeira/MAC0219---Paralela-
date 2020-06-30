@@ -180,46 +180,6 @@ void init_ompi_data(struct process_args *t_data, int n_process) {
   }
 }
 
-// void compute_mandelbrot_threads() {
-//   pthread_t *thread;
-//   struct thread_args *thread_data;
-//   pthread_attr_t attr;
-//   int rc, err_code;
-//   long t;
-//   void *status;
-
-//   thread = malloc(n_threads * sizeof(pthread_t));
-//   thread_data = malloc(n_threads * sizeof(struct thread_args));
-
-//   /* Initialize and set thread detached attribute */
-//   pthread_attr_init(&attr);
-//   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-
-//   init_thread_data(thread_data);
-
-//   for (t = 0; t < n_threads; t++) {
-//     rc = pthread_create(&thread[t], &attr, compute_mandelbrot,
-//                         (void *)&thread_data[t]);
-//     if (rc) {
-//       printf("ERROR; return code from pthread_create() is %d\n", rc);
-//       exit(-1);
-//     }
-//   }
-
-//   pthread_attr_destroy(&attr);
-
-//   // join loop
-//   for (t = 0; t < n_threads; t++) {
-//     err_code = pthread_join(thread[t], &status);
-//     if (err_code) {
-//       printf("ERROR; return code from ,pthread_join() is %d\n", err_code);
-//       exit(-1);
-//     };
-//   };
-// };
-
-// void init_process_data(struct process_args *process_data, int rank) {}
-
 void compute_mandelbrot_ompi(int argc, char *argv[]) {
   int num_processes, rank_process;
   MPI_Init(&argc, &argv);
@@ -290,7 +250,7 @@ void compute_mandelbrot_ompi(int argc, char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
-  //printf("aaa\n");
+  init();
   compute_mandelbrot_ompi(argc, argv);
   return 0;
 };
