@@ -234,7 +234,7 @@ void compute_mandelbrot_ompi(int argc, char *argv[]) {
         update_rgb_buffer(buffer[0], buffer[1], buffer[2]);
       }
     }
-    printf('Vou escrever no arquivo!!!\n');
+    printf("Vou escrever no arquivo!!!\n");
     write_to_file();
 
   } else {
