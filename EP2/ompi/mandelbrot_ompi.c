@@ -53,19 +53,19 @@ void allocate_image_buffer() {
 };
 
 void init() {
-    /* Only computes Triple Spiral Valley with image size = 4096*/
-    c_x_min = -0.188;
-    c_x_max = -0.012;
-    c_y_min = 0.554;
-    c_y_max = 0.754;
-    image_size = 4096;
+  /* Only computes Triple Spiral Valley with image size = 4096*/
+  c_x_min = -0.188;
+  c_x_max = -0.012;
+  c_y_min = 0.554;
+  c_y_max = 0.754;
+  image_size = 4096;
 
-    i_x_max = image_size;
-    i_y_max = image_size;
-    image_buffer_size = image_size * image_size;
+  i_x_max = image_size;
+  i_y_max = image_size;
+  image_buffer_size = image_size * image_size;
 
-    pixel_width = (c_x_max - c_x_min) / i_x_max;
-    pixel_height = (c_y_max - c_y_min) / i_y_max;
+  pixel_width = (c_x_max - c_x_min) / i_x_max;
+  pixel_height = (c_y_max - c_y_min) / i_y_max;
 };
 
 void update_rgb_buffer(int iteration, int x, int y) {
@@ -103,7 +103,7 @@ void write_to_file() {
   fclose(file);
 };
 
-void compute_mandelbrot(struct process_args *process_data) {
+int *compute_mandelbrot(struct process_args *process_data) {
   double z_x;
   double z_y;
   double z_x_squared;
@@ -120,6 +120,11 @@ void compute_mandelbrot(struct process_args *process_data) {
   int end_y = process_data->end_y;
   int start_x = process_data->start_x;
   int end_x = process_data->end_x;
+  int *result =
+      (int *)malloc(3 * (end_x - start_x) * (end_y - start_y) * sizeof(int));
+  int counter = 0;
+
+  printf("%d %d %d %d\n", start_x, end_x, start_y, end_y);
 
   for (i_y = start_y; i_y < end_y; i_y++) {
     c_y = c_y_min + i_y * pixel_height;
@@ -146,11 +151,15 @@ void compute_mandelbrot(struct process_args *process_data) {
         z_x_squared = z_x * z_x;
         z_y_squared = z_y * z_y;
       };
-
-      int buffer[3] = {iteration, i_x, i_y};
-      MPI_Send(&buffer, 3, MPI_INT, MASTER, 0, MPI_COMM_WORLD);
+      result[counter++] = iteration;
+      result[counter++] = i_x;
+      result[counter++] = i_y;
+      // int buffer[3] = {iteration, i_x, i_y};
+      // MPI_Send(&buffer, 3, MPI_INT, MASTER, 0, MPI_COMM_WORLD);
     };
   };
+
+  MPI_Send(result, counter, MPI_INT, MASTER, 0, MPI_COMM_WORLD);
 };
 
 void init_ompi_data(struct process_args *t_data, int n_process) {
@@ -159,7 +168,7 @@ void init_ompi_data(struct process_args *t_data, int n_process) {
   int ver_quadrant_size, hor_quadrant_size, lin, col;
 
   ver_quadrant_size = IMAGE_SIZE / (int)sqrt(n_process);
-  hor_quadrant_size = IMAGE_SIZE / (int)((double)n_process / sqrt(n_process));
+  hor_quadrant_size = IMAGE_SIZE / (int)((double)(n_process) / sqrt(n_process));
 
   for (lin = 0; lin < IMAGE_SIZE; lin += ver_quadrant_size) {
     for (col = 0; col < IMAGE_SIZE; col += hor_quadrant_size) {
@@ -201,49 +210,50 @@ void compute_mandelbrot_ompi(int argc, char *argv[]) {
   MPI_Type_commit(&mpi_process_data_type);
 
   if (rank_process == 0) {
-    /* Process 0 will be a master process. It defines the ammount of work each process
-    needs to execute and then sends the data that each process will work on*/
     init();
-    allocate_image_buffer();
-
-    struct process_args *process_data;
-    process_data = malloc(num_processes * sizeof(struct process_args));
-    init_ompi_data(process_data, num_processes);
-    for (int p = 1; p < num_processes; p++) {
-      MPI_Send(&process_data[p], 1, mpi_process_data_type, p, 0,
+    struct process_args *processes_data = NULL;
+    /* Process 0 will be a master process. It defines the ammount of work each
+    process
+    needs to execute and then sends the data that each process will work on*/
+    processes_data = malloc(num_processes * sizeof(struct process_args));
+    init_ompi_data(processes_data, num_processes);
+    for (int p = 1; p < num_processes; p++)
+      MPI_Send(&processes_data[p], 1, mpi_process_data_type, p, 0,
                MPI_COMM_WORLD);
-    }
-
-    int all_processes_finished = 0;
-    MPI_Status status;
-    while (all_processes_finished < num_processes - 1) {
-      MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-
-      // if tag value is 1 then some process have finished
-      if (status.MPI_TAG == 1) {
-        printf("Work done\n");
-        int work_done;
-        MPI_Recv(&work_done, 1, MPI_INT, status.MPI_SOURCE, 1, MPI_COMM_WORLD,
-                 MPI_STATUS_IGNORE);
-        all_processes_finished++;
-      } else {
-        int buffer[3];
-        MPI_Recv(&buffer, 3, MPI_INT, status.MPI_SOURCE, 0, MPI_COMM_WORLD,
-                 MPI_STATUS_IGNORE);
-        //printf("%d, %d, %d\n", buffer[0], buffer[1], buffer[2]);
-        update_rgb_buffer(buffer[0], buffer[1], buffer[2]);
-      }
-    }
-    printf("Vou escrever no arquivo!!!\n");
-    write_to_file();
-
   } else {
+    printf("rank %d\n", rank_process);
     struct process_args *process_data = malloc(sizeof(struct process_args));
     MPI_Recv(process_data, 1, mpi_process_data_type, MASTER, 0, MPI_COMM_WORLD,
              MPI_STATUS_IGNORE);
     compute_mandelbrot(process_data);
-    int work_done = 1;
-    MPI_Send(&work_done, 1, MPI_INT, 0, 1, MPI_COMM_WORLD);
+    printf("out");
+  }
+
+  if (rank_process == 0) {
+    int counters[num_processes];
+    int *results[num_processes];
+
+    for (int p = 1; p < num_processes; p++) {
+      MPI_Status status;
+      int count;
+      MPI_Probe(p, 0, MPI_COMM_WORLD, &status);
+      MPI_Get_count(&status, MPI_INT, &count);
+      printf("count %d\n", count);
+      int *buffer = (int *)malloc(count * sizeof(int));
+      MPI_Recv(buffer, count, MPI_INT, p, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      counters[p] = count;
+      results[p] = buffer;
+    }
+    printf("hre\n");
+    allocate_image_buffer();
+    for (int p = 1; p < num_processes; p++) {
+      printf("in %d\n", p);
+      for (int i = 0; i < counters[p]; i = i + 3) {
+        update_rgb_buffer(results[p][i], results[p][i + 1], results[p][i + 2]);
+      }
+      printf("out %d\n", p);
+    }
+    write_to_file();
   }
 
   MPI_Finalize();
