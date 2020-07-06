@@ -43,9 +43,10 @@ $(OUTPUT)_ompi_omp: $(SRC)_ompi_omp.c
 
 .PHONY: clean
 clean:
-	rm $(OUTPUT)_omp 	\
-	   $(OUTPUT)_pth 	\
-	   $(OUTPUT)_seq 	\
-	   $(OUTPUT)_cuda 	\
-	   $(OUTPUT)_ompi 	\
-	   *$(IMAGE)		\
+	rm $(OUTPUT)_omp 		\
+	   $(OUTPUT)_pth 		\
+	   $(OUTPUT)_seq 		\
+	   $(OUTPUT)_cuda 		\
+	   $(OUTPUT)_ompi 		\
+	   $(OUTPUT)_ompi_omp 	\
+	   *$(IMAGE)			\
