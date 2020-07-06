@@ -33,7 +33,6 @@ unsigned char **image_buffer;
 int i_x_max;
 int i_y_max;
 int image_buffer_size;
-int n_threads;
 
 int gradient_size = 16;
 int colors[17][3] = {
