@@ -67,21 +67,41 @@ void allocate_image_buffer()
     };
 };
 
-void init(int argc, char *argv[])
+void init(int argc, char *argv[], int rank)
 {
-    /* Only computes Triple Spiral Valley with image size = 4096*/
-    c_x_min = -0.188;
-    c_x_max = -0.012;
-    c_y_min = 0.554;
-    c_y_max = 0.754;
-    image_size = atoi(argv[1]);
+    if (argc < 6)
+    {
+        if (rank == MASTER)
+        {
+            printf("usage:    mpirun -np [num_processes] --host localhost:[num_processes]"
+                   " mandelbrot_ompi c_x_min c_x_max c_y_min c_y_max image_size\n");
+            printf("examples with image_size = 11500:\n");
+            printf("    Full Picture:         mpirun -np 9 --host localhost:9 "
+                   "mandelbrot_ompi -2.5 1.5 -2.0 2.0 11500\n");
+            printf("    Seahorse Valley:      mpirun -np 9 --host localhost:9 "
+                   "mandelbrot_ompi  -0.8 -0.7 0.05 0.15 11500 4\n");
+            printf("    Elephant Valley:      mpirun -np 9 --host localhost:9 "
+                   "mandelbrot_ompi  0.175 0.375 -0.1 0.1 11500 4\n");
+            printf("    Triple Spiral Valley: mpirun -np 9 --host localhost:9 "
+                   "mandelbrot_ompi  -0.188 -0.012 0.554 0.754 11500 4\n");
+        }
+        exit(0);
+    }
+    else
+    {
+        sscanf(argv[1], "%lf", &c_x_min);
+        sscanf(argv[2], "%lf", &c_x_max);
+        sscanf(argv[3], "%lf", &c_y_min);
+        sscanf(argv[4], "%lf", &c_y_max);
+        sscanf(argv[5], "%d", &image_size);
 
-    i_x_max = image_size;
-    i_y_max = image_size;
-    image_buffer_size = image_size * image_size;
+        i_x_max = image_size;
+        i_y_max = image_size;
+        image_buffer_size = image_size * image_size;
 
-    pixel_width = (c_x_max - c_x_min) / i_x_max;
-    pixel_height = (c_y_max - c_y_min) / i_y_max;
+        pixel_width = (c_x_max - c_x_min) / i_x_max;
+        pixel_height = (c_y_max - c_y_min) / i_y_max;
+    }
 };
 
 void update_rgb_buffer(int iteration, int x, int y)
@@ -197,7 +217,7 @@ int *compute_mandelbrot(struct process_args *process_data, int rank)
     MPI_Send(result, counter, MPI_INT, MASTER, 0, MPI_COMM_WORLD);
 };
 
-void init_ompi_data(struct process_args *t_data, int n_process, int *send)
+void init_ompi_data(struct process_args *t_data, int n_process)
 {
     long t = 0;
     int IMAGE_SIZE = image_size;
@@ -240,11 +260,8 @@ void init_ompi_data(struct process_args *t_data, int n_process, int *send)
     }
 }
 
-void compute_mandelbrot_ompi(int argc, char *argv[])
+void compute_mandelbrot_ompi(int argc, char *argv[], int num_processes, int rank_process)
 {
-    int num_processes, rank_process;
-    MPI_Comm_size(MPI_COMM_WORLD, &num_processes);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank_process);
 
     const int nitems = 4;
     int blocklengths[4] = {1, 1, 1, 1};
@@ -260,7 +277,7 @@ void compute_mandelbrot_ompi(int argc, char *argv[])
                            &mpi_process_data_type);
     MPI_Type_commit(&mpi_process_data_type);
 
-    if (rank_process == 0)
+    if (rank_process == MASTER)
     {
         struct process_args *processes_data = NULL;
         int *send;
@@ -269,11 +286,9 @@ void compute_mandelbrot_ompi(int argc, char *argv[])
     process
     needs to execute and then sends the data that each process will work on*/
         processes_data = malloc(num_processes * sizeof(struct process_args));
-        send = malloc(num_processes * sizeof(int));
-        init_ompi_data(processes_data, num_processes, send);
+        init_ompi_data(processes_data, num_processes);
         for (int p = 0; p < num_processes - 1; p++)
         {
-            // if (send[p])
             MPI_Send(&processes_data[p], 1, mpi_process_data_type, p + 1, 0,
                      MPI_COMM_WORLD);
         }
@@ -289,7 +304,7 @@ void compute_mandelbrot_ompi(int argc, char *argv[])
         printf("out");
     }
 
-    if (rank_process == 0)
+    if (rank_process == MASTER)
     {
         int counters[num_processes];
         int *results[num_processes];
@@ -325,8 +340,11 @@ void compute_mandelbrot_ompi(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
+    int num_processes, rank_process;
     MPI_Init(&argc, &argv);
-    init(argc, argv);
-    compute_mandelbrot_ompi(argc, argv);
+    MPI_Comm_size(MPI_COMM_WORLD, &num_processes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank_process);
+    init(argc, argv, rank_process);
+    compute_mandelbrot_ompi(argc, argv, num_processes, rank_process);
     return 0;
 };
