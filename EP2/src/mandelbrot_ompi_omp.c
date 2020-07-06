@@ -239,12 +239,15 @@ void init_ompi_data(struct process_args *t_data, int n_process)
                 printf("[MASTER]%d: %d %d %d %d\n", t + 1, t_data[t].start_x, t_data[t].end_x,
                        t_data[t].start_y, t_data[t].end_y);
             t += 1;
-            if (t == n_process - 1) // last process takes the rest of the pixels
+            if (t == n_process - 2) // last process takes the rest of the pixels
             {
                 t_data[t].start_x = col;
                 t_data[t].end_x = IMAGE_SIZE;
                 t_data[t].start_y = lin;
                 t_data[t].end_y = IMAGE_SIZE;
+                if (DEBUG)
+                    printf("[MASTER]%d: %d %d %d %d\n", t + 1, t_data[t].start_x, t_data[t].end_x,
+                           t_data[t].start_y, t_data[t].end_y);
                 return;
             }
         }
