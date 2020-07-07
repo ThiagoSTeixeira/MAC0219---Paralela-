@@ -11,7 +11,7 @@
 #define min(x, y) (x < y ? x : y);
 #define MASTER 0
 
-#define DEBUG 1
+#define DEBUG 0
 
 struct process_args
 {
@@ -189,7 +189,7 @@ int *compute_mandelbrot(struct process_args *process_data, int rank)
     if (DEBUG)
         printf("[%d]: %d %d %d %d\n", rank, start_x, end_x, start_y, end_y);
 
-#pragma omp parallel for private(c_y) schedule(dynamic) num_threads(num_threads)
+#pragma omp parallel for private(c_y) schedule(dynamic) num_threads(n_threads)
     for (i_y = start_y; i_y < end_y; i_y++)
     {
         c_y = c_y_min + i_y * pixel_height;
@@ -199,7 +199,7 @@ int *compute_mandelbrot(struct process_args *process_data, int rank)
             c_y = 0.0;
         };
 
-#pragma omp parallel for private(z_x, z_y, z_x_squared, z_y_squared, c_x, iteration) schedule(dynamic) num_threads(num_threads)
+#pragma omp parallel for private(z_x, z_y, z_x_squared, z_y_squared, c_x, iteration) schedule(dynamic) num_threads(n_threads)
         for (i_x = start_x; i_x < end_x; i_x++)
         {
             c_x = c_x_min + i_x * pixel_width;

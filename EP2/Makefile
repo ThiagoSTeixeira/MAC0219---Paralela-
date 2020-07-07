@@ -40,7 +40,7 @@ $(OUTPUT)_ompi: $(SRC)_ompi.c
 	$(MCC) -o $(OUTPUT)_ompi $(MFLAGS) $(SRC)_ompi.c
 
 $(OUTPUT)_ompi_omp: $(SRC)_ompi_omp.c
-	$(MCC) -o $(OUTPUT)_ompi_omp $(MFLAGS) $(CC_OPT) $(SRC)_ompi_omp.c
+	$(MCC) -o $(OUTPUT)_ompi_omp $(MFLAGS) $(CC_OMP) $(SRC)_ompi_omp.c
 
 $(OUTPUT)_ompi_cuda: $(SRC)_ompi_cuda.cu
 	$(NCC) -o $(OUTPUT)_ompi_cuda $(MFLAGS) $(NFLAGS) $(OMPICOMPATFLAGS) $(SRC)_ompi_cuda.cu
