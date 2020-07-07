@@ -9,7 +9,8 @@
 #define min(x, y) (x < y ? x : y);
 #define MASTER 0
 
-#define DEBUG 1
+// #define DEBUG 1
+#define DEBUG 0
 
 struct process_args
 {
@@ -240,14 +241,6 @@ void init_ompi_data(struct process_args *t_data, int n_process)
     {
         for (col = 0; col < IMAGE_SIZE; col += hor_quadrant_size)
         {
-            t_data[t].start_x = col;
-            t_data[t].end_x = min(col + hor_quadrant_size, IMAGE_SIZE);
-            t_data[t].start_y = lin;
-            t_data[t].end_y = min(lin + ver_quadrant_size, IMAGE_SIZE);
-            if (DEBUG)
-                printf("[MASTER]%d: %d %d %d %d\n", t + 1, t_data[t].start_x, t_data[t].end_x,
-                       t_data[t].start_y, t_data[t].end_y);
-            t += 1;
             if (t == n_process - 2) // last process takes the rest of the pixels
             {
                 t_data[t].start_x = col;
@@ -259,6 +252,14 @@ void init_ompi_data(struct process_args *t_data, int n_process)
                            t_data[t].start_y, t_data[t].end_y);
                 return;
             }
+            t_data[t].start_x = col;
+            t_data[t].end_x = min(col + hor_quadrant_size, IMAGE_SIZE);
+            t_data[t].start_y = lin;
+            t_data[t].end_y = min(lin + ver_quadrant_size, IMAGE_SIZE);
+            if (DEBUG)
+                printf("[MASTER]%d: %d %d %d %d\n", t + 1, t_data[t].start_x, t_data[t].end_x,
+                       t_data[t].start_y, t_data[t].end_y);
+            t += 1;
         }
     }
 
