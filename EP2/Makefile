@@ -11,6 +11,8 @@ NFLAGS=-gencode arch=compute_50,code=[sm_50,compute_50] -Wno-deprecated-gpu-targ
 MCC=mpicc
 MFLAGS=-lm
 
+OMPICOMPATFLAGS=-I/usr/include/openmpi-x86_64 -pthread -Wl,-rpath -Wl,/usr/lib64/openmpi/lib -Wl,--enable-new-dtags -L/usr/lib64/openmpi/lib -lmpi
+
 CC_OMP=-fopenmp
 CC_PTH=-pthread
 
@@ -40,6 +42,8 @@ $(OUTPUT)_ompi: $(SRC)_ompi.c
 $(OUTPUT)_ompi_omp: $(SRC)_ompi_omp.c
 	$(MCC) -o $(OUTPUT)_ompi_omp $(MFLAGS) $(CC_OPT) $(SRC)_ompi_omp.c
 
+$(OUTPUT)_ompi_cuda: $(SRC)_ompi_cuda.cu
+	$(NCC) -o $(OUTPUT)_ompi_cuda $(MFLAGS) $(NFLAGS) $(OMPICOMPATFLAGS) $(SRC)_ompi_cuda.cu
 
 .PHONY: clean
 clean:
