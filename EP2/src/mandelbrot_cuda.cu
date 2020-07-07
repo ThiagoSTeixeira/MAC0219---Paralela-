@@ -6,8 +6,17 @@
 #include <time.h>
 #include <sys/time.h>
 
+struct timer_info {
+    clock_t c_start;
+    clock_t c_end;
+    struct timespec t_start;
+    struct timespec t_end;
+    struct timeval v_start;
+    struct timeval v_end;
+};
 
-#define MAX_THREADS_PER_BLOCK 512
+struct timer_info timer;
+
 
 double c_x_min;
 double c_x_max;
@@ -27,9 +36,10 @@ unsigned char *dev_image_buffer_red;
 unsigned char *dev_image_buffer_blue;
 unsigned char *dev_image_buffer_green;
 
-
 unsigned char **pixels;
 
+int block_dim_x;
+int block_dim_y;
 
 int i_x_max;
 int i_y_max;
@@ -58,14 +68,14 @@ void allocate_image_buffer()
 
 void init(int argc, char *argv[])
 {
-    if (argc < 6)
+    if (argc < 8)
     {
-        printf("usage: ./mandelbrot_seq c_x_min c_x_max c_y_min c_y_max image_size\n");
+        printf("usage: ./mandelbrot_seq c_x_min c_x_max c_y_min c_y_max image_size dimX dimY\n");
         printf("examples with image_size = 11500:\n");
-        printf("    Full Picture:         ./mandelbrot_seq -2.5 1.5 -2.0 2.0 11500\n");
-        printf("    Seahorse Valley:      ./mandelbrot_seq -0.8 -0.7 0.05 0.15 11500\n");
-        printf("    Elephant Valley:      ./mandelbrot_seq 0.175 0.375 -0.1 0.1 11500\n");
-        printf("    Triple Spiral Valley: ./mandelbrot_seq -0.188 -0.012 0.554 0.754 11500\n");
+        printf("    Full Picture:         ./mandelbrot_seq -2.5 1.5 -2.0 2.0 4096 8 64\n");
+        printf("    Seahorse Valley:      ./mandelbrot_seq -0.8 -0.7 0.05 0.15 4096 32 32\n");
+        printf("    Elephant Valley:      ./mandelbrot_seq 0.175 0.375 -0.1 0.1 4096 16 64\n");
+        printf("    Triple Spiral Valley: ./mandelbrot_seq -0.188 -0.012 0.554 0.754 4096 1 32\n");
         exit(0);
     }
     else
@@ -75,6 +85,8 @@ void init(int argc, char *argv[])
         sscanf(argv[3], "%lf", &c_y_min);
         sscanf(argv[4], "%lf", &c_y_max);
         sscanf(argv[5], "%d", &image_size);
+        sscanf(argv[6], "%d", &block_dim_x);
+        sscanf(argv[7], "%d", &block_dim_y);
 
         i_x_max = image_size;
         i_y_max = image_size;
@@ -189,28 +201,20 @@ __device__ int mandelbrot(double c_x, double c_y) {
 
 
 __global__ void compute_mandelbrot(unsigned char *image_buffer_red, unsigned char *image_buffer_green, unsigned char *image_buffer_blue, 
-                                    double c_x_min, double c_y_min, double pixel_width, double pixel_height, int image_size, int fator,
+                                    double c_x_min, double c_y_min, double pixel_width, double pixel_height, int image_size,
                                     int *color_red, int *color_green, int *color_blue){
-
 
     int i_x;
     int i_y;
     int iteration;
-    int dev_MAX_THREADS_PER_BLOCK = blockDim.x;
 
-    double parametro = blockIdx.x % fator;
 
-    if (parametro == 0){
-        i_x = threadIdx.x;
-    }
-    else{
-        i_x = threadIdx.x + parametro*dev_MAX_THREADS_PER_BLOCK;
-    }
-
-    i_y = (int)(blockIdx.x/fator);
+    i_x = blockIdx.x*blockDim.x+threadIdx.x;
+    i_y = blockIdx.y*blockDim.y+threadIdx.y;
 
 
     double c_y = c_y_min + i_y * pixel_height;
+
     if(fabs(c_y) < pixel_height / 2){
                 c_y = 0.0;
     };
@@ -229,24 +233,29 @@ int main(int argc, char *argv[])
 
     init_colors();
 
-    int BLOCK_DIM = image_size;
-    int N = image_size;
+    int time;
 
-    dim3 dimBlock(BLOCK_DIM, BLOCK_DIM, 1);
-    dim3 dimGrid((int)ceil(N/dimBlock.x),(int)ceil(N/dimBlock.y), 1);
 
-    printf("%d\n", dimBlock.y);
+    dim3 dimBlock(block_dim_x, block_dim_y);
+	dim3 dimGrid((int)ceil(image_size/dimBlock.x),(int)ceil(image_size/dimBlock.y));
 
-    int fator = image_size/MAX_THREADS_PER_BLOCK;
-    int num_blocos = fator * image_size;
+	//MEDICAO DE TEMPO
+	timer.c_start = clock();
+    clock_gettime(CLOCK_MONOTONIC, &timer.t_start);
+    gettimeofday(&timer.v_start, NULL);
 
-    compute_mandelbrot <<<num_blocos, MAX_THREADS_PER_BLOCK>>>(dev_image_buffer_red, dev_image_buffer_green, dev_image_buffer_blue, 
-                                                    c_x_min, c_y_min, pixel_width, pixel_height, image_size, fator,
+    compute_mandelbrot <<<dimGrid, dimBlock>>>(dev_image_buffer_red, dev_image_buffer_green, dev_image_buffer_blue, 
+                                                    c_x_min, c_y_min, pixel_width, pixel_height, image_size,
                                                     dev_color_red, dev_color_green, dev_color_blue);
 
     cudaMemcpy(image_buffer_red, dev_image_buffer_red, sizeof(unsigned char) * image_buffer_size, cudaMemcpyDeviceToHost);
     cudaMemcpy(image_buffer_green, dev_image_buffer_green, sizeof(unsigned char) * image_buffer_size, cudaMemcpyDeviceToHost);
     cudaMemcpy(image_buffer_blue, dev_image_buffer_blue, sizeof(unsigned char) * image_buffer_size, cudaMemcpyDeviceToHost);
+
+    timer.c_end = clock();
+    clock_gettime(CLOCK_MONOTONIC, &timer.t_end);
+    gettimeofday(&timer.v_end, NULL);
+    //FIM DA MEDICAO
 
     cudaFree(dev_color_red);
     cudaFree(dev_color_green);
@@ -261,5 +270,12 @@ int main(int argc, char *argv[])
 
     write_to_file();
 
-    return 0;
+    printf("%f\n",
+    (double) (timer.t_end.tv_sec - timer.t_start.tv_sec) +
+    (double) (timer.t_end.tv_nsec - timer.t_start.tv_nsec) / 1000000000.0);
+
+    time = (double) (timer.t_end.tv_sec - timer.t_start.tv_sec) +
+    (double) (timer.t_end.tv_nsec - timer.t_start.tv_nsec) / 1000000000.0;
+
+    return time;
 };
