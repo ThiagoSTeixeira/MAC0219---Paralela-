@@ -2,9 +2,23 @@
 #include <stdlib.h>
 #include <math.h>
 #include <omp.h>
+#include <time.h>
+#include <sys/time.h>
 
 #define CHUNKSIZE 10
 #define THREADS 32
+
+struct timer_info
+{
+	clock_t c_start;
+	clock_t c_end;
+	struct timespec t_start;
+	struct timespec t_end;
+	struct timeval v_start;
+	struct timeval v_end;
+};
+
+struct timer_info timer;
 
 double c_x_min;
 double c_x_max;
@@ -53,6 +67,10 @@ void write_to_file();
 
 int main(int argc, char *argv[])
 {
+	timer.c_start = clock();
+	clock_gettime(CLOCK_MONOTONIC, &timer.t_start);
+	gettimeofday(&timer.v_start, NULL);
+
 	init(argc, argv);
 
 	allocate_image_buffer();
@@ -60,6 +78,14 @@ int main(int argc, char *argv[])
 	compute_mandelbrot();
 
 	write_to_file();
+
+	timer.c_end = clock();
+	clock_gettime(CLOCK_MONOTONIC, &timer.t_end);
+	gettimeofday(&timer.v_end, NULL);
+
+	printf("%f\n",
+		   (double)(timer.t_end.tv_sec - timer.t_start.tv_sec) +
+			   (double)(timer.t_end.tv_nsec - timer.t_start.tv_nsec) / 1000000000.0);
 
 	return 0;
 };

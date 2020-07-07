@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <math.h>
 #include <pthread.h>
+#include <time.h>
+#include <sys/time.h>
 
 #define min(x, y) (x < y ? x : y);
 
@@ -13,6 +15,18 @@ struct thread_args
     int end_x;
     pthread_t tid;
 };
+
+struct timer_info
+{
+    clock_t c_start;
+    clock_t c_end;
+    struct timespec t_start;
+    struct timespec t_end;
+    struct timeval v_start;
+    struct timeval v_end;
+};
+
+struct timer_info timer;
 
 double c_x_min;
 double c_x_max;
@@ -281,13 +295,25 @@ void compute_mandelbrot_threads()
 
 int main(int argc, char *argv[])
 {
+    timer.c_start = clock();
+    clock_gettime(CLOCK_MONOTONIC, &timer.t_start);
+    gettimeofday(&timer.v_start, NULL);
+
     init(argc, argv);
 
-    //allocate_image_buffer();
+    allocate_image_buffer();
 
     compute_mandelbrot_threads();
 
-    //write_to_file();
+    write_to_file();
+
+    timer.c_end = clock();
+    clock_gettime(CLOCK_MONOTONIC, &timer.t_end);
+    gettimeofday(&timer.v_end, NULL);
+
+    printf("%f\n",
+           (double)(timer.t_end.tv_sec - timer.t_start.tv_sec) +
+               (double)(timer.t_end.tv_nsec - timer.t_start.tv_nsec) / 1000000000.0);
 
     return 0;
 };

@@ -1,6 +1,8 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
+#include <sys/time.h>
 
 #include "mpi.h"
 
@@ -16,6 +18,18 @@ struct process_args
     int start_x;
     int end_x;
 };
+
+struct timer_info
+{
+    clock_t c_start;
+    clock_t c_end;
+    struct timespec t_start;
+    struct timespec t_end;
+    struct timeval v_start;
+    struct timeval v_end;
+};
+
+struct timer_info timer;
 
 double c_x_min;
 double c_x_max;
@@ -355,11 +369,32 @@ void compute_mandelbrot_ompi(int argc, char *argv[], int num_processes, int rank
 
 int main(int argc, char *argv[])
 {
+
     int num_processes, rank_process;
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &num_processes);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank_process);
+
+    if (rank_process == MASTER)
+    {
+        timer.c_start = clock();
+        clock_gettime(CLOCK_MONOTONIC, &timer.t_start);
+        gettimeofday(&timer.v_start, NULL);
+    }
+
     init(argc, argv, rank_process);
     compute_mandelbrot_ompi(argc, argv, num_processes, rank_process);
+
+    if (rank_process == MASTER)
+    {
+        timer.c_end = clock();
+        clock_gettime(CLOCK_MONOTONIC, &timer.t_end);
+        gettimeofday(&timer.v_end, NULL);
+
+        printf("%f\n",
+               (double)(timer.t_end.tv_sec - timer.t_start.tv_sec) +
+                   (double)(timer.t_end.tv_nsec - timer.t_start.tv_nsec) / 1000000000.0);
+    }
+
     return 0;
 };
