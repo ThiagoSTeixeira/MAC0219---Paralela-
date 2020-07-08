@@ -54,3 +54,12 @@ clean:
 	   $(OUTPUT)_ompi 		\
 	   $(OUTPUT)_ompi_omp 	\
 	   *$(IMAGE)			\
+	   *.zip
+
+.PHONY:
+compress:
+	zip -r EP2_MAC219.zip src
+	zip    EP2_MAC219.zip EP2.pdf
+	zip    EP2_MAC219.zip RelatorioEP2.ipynb
+	zip    EP2_MAC219.zip Makefile
+	zip    EP2_MAC219.zip *.csv
