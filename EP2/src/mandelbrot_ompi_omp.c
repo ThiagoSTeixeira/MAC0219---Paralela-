@@ -182,9 +182,16 @@ int *compute_mandelbrot(struct process_args *process_data, int rank)
     int end_y = process_data->end_y;
     int start_x = process_data->start_x;
     int end_x = process_data->end_x;
-    int *result =
-        (int *)malloc(3 * (end_x - start_x) * (end_y - start_y) * sizeof(int));
-    int counter = 0;
+    int counter;
+    int *result;
+    int pos;
+
+    if (end_y < start_y || end_x < start_x)
+        counter = 0;
+    else
+        counter = 3 * (end_x - start_x) * (end_y - start_y);
+
+    result = (int *)malloc(counter * sizeof(int));
 
     if (DEBUG)
         printf("[%d]: %d %d %d %d\n", rank, start_x, end_x, start_y, end_y);
@@ -199,7 +206,7 @@ int *compute_mandelbrot(struct process_args *process_data, int rank)
             c_y = 0.0;
         };
 
-#pragma omp parallel for private(z_x, z_y, z_x_squared, z_y_squared, c_x, iteration) schedule(dynamic) num_threads(n_threads)
+#pragma omp parallel for private(z_x, z_y, z_x_squared, z_y_squared, c_x, iteration, pos) schedule(dynamic) num_threads(n_threads)
         for (i_x = start_x; i_x < end_x; i_x++)
         {
             c_x = c_x_min + i_x * pixel_width;
@@ -220,9 +227,14 @@ int *compute_mandelbrot(struct process_args *process_data, int rank)
                 z_x_squared = z_x * z_x;
                 z_y_squared = z_y * z_y;
             };
-            result[counter++] = iteration;
-            result[counter++] = i_x;
-            result[counter++] = i_y;
+            pos = 3 * ((i_y - start_y) * (end_x - start_x) + i_x - start_x);
+
+            if (DEBUG && pos > counter)
+                printf("[%d]: pos = %d counter = %d\n", rank, pos, counter);
+
+            result[pos] = iteration;
+            result[pos + 1] = i_x;
+            result[pos + 2] = i_y;
         };
     };
 
@@ -339,14 +351,24 @@ void compute_mandelbrot_ompi(int argc, char *argv[], int num_processes, int rank
             MPI_Status status;
             int count;
             MPI_Probe(p, 0, MPI_COMM_WORLD, &status);
-            MPI_Get_count(&status, MPI_INT, &count);
+
             if (DEBUG)
+                printf("[MASTER]: probe [%d] completed with error %d\n", p, status.MPI_ERROR);
+
+            MPI_Get_count(&status, MPI_INT, &count);
+
+            if (DEBUG)
+            {
+                printf("[MASTER]: get_count [%d] completed with error %d\n", p, status.MPI_ERROR);
                 printf("[MASTER]: process %d had count %d\n", p, count);
+            }
+
             int *buffer = (int *)malloc(count * sizeof(int));
             MPI_Recv(buffer, count, MPI_INT, p, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             counters[p] = count;
             results[p] = buffer;
         }
+
         if (DEBUG)
             printf("[MASTER]: finished collecting results\n");
 
@@ -358,15 +380,22 @@ void compute_mandelbrot_ompi(int argc, char *argv[], int num_processes, int rank
         for (int p = 1; p < num_processes; p++)
         {
             if (DEBUG)
-                printf("[MASTER]: updatig values from %d\n", p);
+            {
+                printf("[MASTER]: updating values from %d\n", p);
+                printf("[MASTER]: counters[%d] = %d / mod3: %d\n", p, counters[p], counters[p] % 3);
+            }
+
             for (int i = 0; i < counters[p]; i = i + 3)
             {
                 update_rgb_buffer(results[p][i], results[p][i + 1], results[p][i + 2]);
             }
+
             if (DEBUG)
                 printf("[MASTER]: finished reading process %d results\n", p);
         }
+
         write_to_file();
+
         if (DEBUG)
             printf("[MASTER]: finished writing imagefile\n");
     }
