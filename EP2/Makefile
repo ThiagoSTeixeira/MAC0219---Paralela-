@@ -19,8 +19,9 @@ CC_OMP=-fopenmp
 CC_PTH=-pthread
 NCC_OPT=-gencode arch=compute_50,code=[sm_50,compute_50] -Wno-deprecated-gpu-targets
 MCC_OPT=-lm
-OMPICOMPATCC_OPT=-I/usr/include/openmpi-x86_64 -pthread -Wl,-rpath -Wl,/usr/lib64/openmpi/lib -Wl,--enable-new-dtags -L/usr/lib64/openmpi/lib -lmpi
-
+OMPICOMPATCC_OPT=-I/usr/mpi/gcc/openmpi-1.4.6/include -L/usr/mpi/gcc/openmpi-1.4.6/lib64 -lmpi
+#Na rede linux:
+# OMPICOMPATCC_OPT=-I/home/bcc/caiofcas/.local/include -L/usr/mpi/gcc/openmpi-1.4.6/lib64 -lmpi
 
 
 .PHONY: all
