@@ -164,7 +164,7 @@ void write_to_file()
     fclose(file);
 };
 
-int *compute_mandelbrot(struct process_args *process_data, int rank)
+void compute_mandelbrot(struct process_args *process_data, int rank)
 {
     double z_x;
     double z_y;
@@ -247,8 +247,8 @@ void init_ompi_data(struct process_args *t_data, int n_process)
     int IMAGE_SIZE = image_size;
     int ver_quadrant_size, hor_quadrant_size, lin, col;
 
-    ver_quadrant_size = (IMAGE_SIZE / (int)sqrt(n_process)) + 1;
-    hor_quadrant_size = (IMAGE_SIZE / (int)sqrt(n_process)) + 1;
+    ver_quadrant_size = (IMAGE_SIZE / (int)sqrt(n_process - 1)) + 1;
+    hor_quadrant_size = (IMAGE_SIZE / (int)sqrt(n_process - 1)) + 1;
 
     if (DEBUG)
     {

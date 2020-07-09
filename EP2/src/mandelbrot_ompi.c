@@ -160,7 +160,7 @@ void write_to_file()
     fclose(file);
 };
 
-int *compute_mandelbrot(struct process_args *process_data, int rank)
+void compute_mandelbrot(struct process_args *process_data, int rank)
 {
     double z_x;
     double z_y;
@@ -229,8 +229,8 @@ void init_ompi_data(struct process_args *t_data, int n_process)
     int IMAGE_SIZE = image_size;
     int ver_quadrant_size, hor_quadrant_size, lin, col;
 
-    ver_quadrant_size = (IMAGE_SIZE / (int)sqrt(n_process)) + 1;
-    hor_quadrant_size = (IMAGE_SIZE / (int)sqrt(n_process)) + 1;
+    ver_quadrant_size = (IMAGE_SIZE / (int)sqrt(n_process - 1)) + 1;
+    hor_quadrant_size = (IMAGE_SIZE / (int)sqrt(n_process - 1)) + 1;
 
     if (DEBUG)
     {
@@ -334,8 +334,10 @@ void compute_mandelbrot_ompi(int argc, char *argv[], int num_processes, int rank
             int count;
             MPI_Probe(p, 0, MPI_COMM_WORLD, &status);
             MPI_Get_count(&status, MPI_INT, &count);
+
             if (DEBUG)
                 printf("[MASTER]: process %d had count %d\n", p, count);
+
             int *buffer = (int *)malloc(count * sizeof(int));
             MPI_Recv(buffer, count, MPI_INT, p, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             counters[p] = count;
