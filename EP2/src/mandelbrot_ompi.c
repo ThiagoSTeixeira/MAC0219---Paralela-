@@ -10,15 +10,15 @@
 #define MASTER 0
 
 // #define DEBUG 1
-#define DEBUG 0
+#define DEBUG 1
 
-struct process_args
+typedef struct process_args
 {
     int start_y;
     int end_y;
     int start_x;
     int end_x;
-};
+} process_args;
 
 struct timer_info
 {
@@ -160,7 +160,7 @@ void write_to_file()
     fclose(file);
 };
 
-void compute_mandelbrot(struct process_args *process_data, int rank)
+void compute_mandelbrot(process_args *process_args, int rank, int *result)
 {
     double z_x;
     double z_y;
@@ -174,13 +174,11 @@ void compute_mandelbrot(struct process_args *process_data, int rank)
     double c_x;
     double c_y;
 
-    int start_y = process_data->start_y;
-    int end_y = process_data->end_y;
-    int start_x = process_data->start_x;
-    int end_x = process_data->end_x;
-    int *result =
-        (int *)malloc(3 * (end_x - start_x) * (end_y - start_y) * sizeof(int));
-    int counter = 0;
+    int start_y = process_args->start_y;
+    int end_y = process_args->end_y;
+    int start_x = process_args->start_x;
+    int end_x = process_args->end_x;
+    int next = 0;
 
     if (DEBUG)
         printf("[%d]: %d %d %d %d\n", rank, start_x, end_x, start_y, end_y);
@@ -214,63 +212,43 @@ void compute_mandelbrot(struct process_args *process_data, int rank)
                 z_x_squared = z_x * z_x;
                 z_y_squared = z_y * z_y;
             };
-            result[counter++] = iteration;
-            result[counter++] = i_x;
-            result[counter++] = i_y;
+            result[next++] = iteration;
+            result[next++] = i_x;
+            result[next++] = i_y;
         };
     };
-
-    MPI_Send(result, counter, MPI_INT, MASTER, 0, MPI_COMM_WORLD);
 };
 
-void init_ompi_data(struct process_args *t_data, int n_process)
+void init_ompi_data(process_args *p_data, int n_process)
 {
-    long t = 0;
-    int IMAGE_SIZE = image_size;
-    int ver_quadrant_size, hor_quadrant_size, lin, col;
 
-    ver_quadrant_size = (IMAGE_SIZE / (int)sqrt(n_process - 1)) + 1;
-    hor_quadrant_size = (IMAGE_SIZE / (int)sqrt(n_process - 1)) + 1;
+    int IMAGE_SIZE = image_size;
+    int vertical_chunk_size, lin;
+
+    vertical_chunk_size = IMAGE_SIZE / n_process;
 
     if (DEBUG)
-    {
-        printf("[MASTER]: vertical quadrant value : %d\n", ver_quadrant_size);
-        printf("[MASTER]: horizontal quadrant value : %d\n", hor_quadrant_size);
-    }
-    for (lin = 0; lin < IMAGE_SIZE; lin += ver_quadrant_size)
-    {
-        for (col = 0; col < IMAGE_SIZE; col += hor_quadrant_size)
-        {
-            if (t == n_process - 2) // last process takes the rest of the pixels
-            {
-                t_data[t].start_x = col;
-                t_data[t].end_x = IMAGE_SIZE;
-                t_data[t].start_y = lin;
-                t_data[t].end_y = IMAGE_SIZE;
-                if (DEBUG)
-                    printf("[MASTER]%d: %d %d %d %d\n", t + 1, t_data[t].start_x, t_data[t].end_x,
-                           t_data[t].start_y, t_data[t].end_y);
-                return;
-            }
-            t_data[t].start_x = col;
-            t_data[t].end_x = min(col + hor_quadrant_size, IMAGE_SIZE);
-            t_data[t].start_y = lin;
-            t_data[t].end_y = min(lin + ver_quadrant_size, IMAGE_SIZE);
-            if (DEBUG)
-                printf("[MASTER]%d: %d %d %d %d\n", t + 1, t_data[t].start_x, t_data[t].end_x,
-                       t_data[t].start_y, t_data[t].end_y);
-            t += 1;
-        }
-    }
+        printf("[MASTER]: vertical chunk size : %d\n", vertical_chunk_size);
 
-    // Leftover processes
-    for (int i = t; i < n_process; i++)
+    lin = 0;
+    for (int process_rank = 0; process_rank < n_process; process_rank++)
     {
-        t_data[i].start_x = 0;
-        t_data[i].end_x = -1;
-        t_data[i].start_y = 0;
-        t_data[i].end_y = -1;
+        p_data[process_rank].start_x = 0;
+        p_data[process_rank].end_x = IMAGE_SIZE;
+        p_data[process_rank].start_y = lin;
+
+        lin = process_rank == n_process - 1 ? IMAGE_SIZE : lin + vertical_chunk_size;
+        p_data[process_rank].end_y = lin;
+
+        if (DEBUG)
+            printf("[MASTER]%d: %d %d %d %d\n", process_rank, p_data[process_rank].start_x,
+                   p_data[process_rank].end_x, p_data[process_rank].start_y, p_data[process_rank].end_y);
     }
+}
+
+int get_size_data(struct process_args *process_arg)
+{
+    return 3 * (process_arg->end_x - process_arg->start_x) * (process_arg->end_y - process_arg->start_y);
 }
 
 void compute_mandelbrot_ompi(int argc, char *argv[], int num_processes, int rank_process)
@@ -281,28 +259,29 @@ void compute_mandelbrot_ompi(int argc, char *argv[], int num_processes, int rank
     MPI_Datatype types[4] = {MPI_INT, MPI_INT, MPI_INT, MPI_INT};
     MPI_Datatype mpi_process_data_type;
     MPI_Aint offsets[4];
-    offsets[1] = offsetof(struct process_args, start_y);
-    offsets[3] = offsetof(struct process_args, end_y);
-    offsets[0] = offsetof(struct process_args, start_x);
-    offsets[2] = offsetof(struct process_args, end_x);
+    offsets[0] = offsetof(process_args, start_x);
+    offsets[1] = offsetof(process_args, end_x);
+    offsets[2] = offsetof(process_args, start_y);
+    offsets[3] = offsetof(process_args, end_y);
 
     MPI_Type_create_struct(nitems, blocklengths, offsets, types,
                            &mpi_process_data_type);
     MPI_Type_commit(&mpi_process_data_type);
 
+    process_args *processes_args = NULL;
+
     if (rank_process == MASTER)
     {
-        struct process_args *processes_data = NULL;
 
         /* Process 0 will be a master process. It defines the ammount of work
         each process needs to execute and then sends the data that each process
         will work on*/
 
-        processes_data = malloc(num_processes * sizeof(struct process_args));
-        init_ompi_data(processes_data, num_processes);
+        processes_args = malloc(num_processes * sizeof(process_args));
+        init_ompi_data(processes_args, num_processes);
 
-        for (int p = 0; p < num_processes - 1; p++)
-            MPI_Send(&processes_data[p], 1, mpi_process_data_type, p + 1, 0,
+        for (int p = 1; p < num_processes; p++)
+            MPI_Send(&processes_args[p], 1, mpi_process_data_type, p, 0,
                      MPI_COMM_WORLD);
     }
     else
@@ -310,21 +289,30 @@ void compute_mandelbrot_ompi(int argc, char *argv[], int num_processes, int rank
         if (DEBUG)
             printf("[%d]: initiated\n", rank_process);
 
-        struct process_args *process_data = malloc(sizeof(struct process_args));
-        MPI_Recv(process_data, 1, mpi_process_data_type, MASTER, 0, MPI_COMM_WORLD,
+        struct process_args *process_args = malloc(sizeof(struct process_args));
+        MPI_Recv(process_args, 1, mpi_process_data_type, MASTER, 0, MPI_COMM_WORLD,
                  MPI_STATUS_IGNORE);
 
         if (DEBUG)
             printf("[%d]: received data\n", rank_process);
 
-        compute_mandelbrot(process_data, rank_process);
+        int result_size = get_size_data(process_args);
+        int *result = (int *)malloc(result_size * sizeof(int));
+
+        compute_mandelbrot(process_args, rank_process, result);
 
         if (DEBUG)
             printf("[%d]: finished computation\n", rank_process);
+
+        MPI_Send(result, result_size, MPI_INT, MASTER, 0, MPI_COMM_WORLD);
+
+        if (DEBUG)
+            printf("[%d]: sent computated data\n", rank_process);
     }
 
     if (rank_process == MASTER)
     {
+
         int counters[num_processes];
         int *results[num_processes];
 
@@ -343,15 +331,31 @@ void compute_mandelbrot_ompi(int argc, char *argv[], int num_processes, int rank
             counters[p] = count;
             results[p] = buffer;
         }
+
         if (DEBUG)
-            printf("[MASTER]: finished collecting results\n");
+            printf("[MASTER]: finished collecting results from process\n");
+
+        process_args *master_data = &processes_args[MASTER];
+        int result_size = get_size_data(master_data);
+        int *result = malloc(result_size * sizeof(int));
+
+        if (DEBUG)
+            printf("[MASTER]: initiated\n");
+
+        compute_mandelbrot(&processes_args[MASTER], MASTER, result);
+
+        if (DEBUG)
+            printf("[MASTER]: finished computation\n");
+
+        counters[MASTER] = result_size;
+        results[MASTER] = result;
 
         allocate_image_buffer();
 
         if (DEBUG)
             printf("[MASTER]: image buffer allocated\n");
 
-        for (int p = 1; p < num_processes; p++)
+        for (int p = 0; p < num_processes; p++)
         {
             if (DEBUG)
                 printf("[MASTER]: updatig values from %d\n", p);
