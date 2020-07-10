@@ -146,10 +146,10 @@ def run_ompi_cuda(repetitions=15, process_range=[2, 3, 5, 9, 17, 33, 65],
 
 
 if __name__ == "__main__":
-    run_seq()
-    run_pth()
-    run_omp()
+    #run_seq()
+    #run_pth()
+    #run_omp()
     run_cuda()
-    run_ompi()
-    run_ompi_omp()
-    run_ompi_cuda()
+    #run_ompi()
+    #run_ompi_omp()
+    #run_ompi_cuda()
