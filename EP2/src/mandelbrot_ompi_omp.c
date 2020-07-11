@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -193,7 +194,7 @@ void compute_mandelbrot(process_args *process_args, int rank, int *result)
         {
             c_y = 0.0;
         };
-#pragma omp parallel for private(z_x, z_y, z_x_squared, z_y_squared, c_x, iteration, pos) schedule(dynamic) num_threads(n_threads)
+#pragma omp parallel for private(z_x, z_y, z_x_squared, z_y_squared, c_x, iteration) schedule(dynamic) num_threads(n_threads)
         for (i_x = start_x; i_x < end_x; i_x++)
         {
             c_x = c_x_min + i_x * pixel_width;
