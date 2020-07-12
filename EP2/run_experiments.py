@@ -81,7 +81,7 @@ def run_cuda(repetitions=15, dimensions=[(2, 2), (4, 4), (8, 8), (16, 16), (32, 
         handle.close()
 
 
-def run_ompi(repetitions=15, process_range=[2, 3, 5, 9, 17, 33, 65], size=4096):
+def run_ompi(repetitions=15, process_range=[1, 2, 4, 8, 16, 32, 64], size=4096):
     subprocess.run(['make', 'mandelbrot_ompi'])
     string = "processes,duration\n"
     for p in process_range:
@@ -101,7 +101,7 @@ def run_ompi(repetitions=15, process_range=[2, 3, 5, 9, 17, 33, 65], size=4096):
         handle.close()
 
 
-def run_ompi_omp(repetitions=15, process_range=[2, 3, 5, 9, 17, 33, 65],
+def run_ompi_omp(repetitions=15, process_range=[1, 2, 4, 8, 16, 32, 64],
                  thread_range=[1, 2, 4, 8, 16, 32, 64], size=4096):
     subprocess.run(['make', 'mandelbrot_ompi_omp'])
     string = "processes,threads,duration\n"
@@ -123,7 +123,7 @@ def run_ompi_omp(repetitions=15, process_range=[2, 3, 5, 9, 17, 33, 65],
         handle.close()
 
 
-def run_ompi_cuda(repetitions=15, process_range=[2, 3, 5, 9, 17, 33, 65],
+def run_ompi_cuda(repetitions=15, process_range=[1, 2, 4, 8, 16, 32, 64],
                   dimensions=[(2, 2), (4, 4), (8, 8), (16, 16), (32, 32)], size=4096):
     subprocess.run(['make', 'mandelbrot_ompi_cuda'])
     string = "processes,dimensions,duration\n"
@@ -149,7 +149,7 @@ if __name__ == "__main__":
     #run_seq()
     #run_pth()
     #run_omp()
-    run_cuda()
-    #run_ompi()
-    #run_ompi_omp()
-    #run_ompi_cuda()
+    #run_cuda()
+    run_ompi()
+    run_ompi_omp()
+    run_ompi_cuda()
