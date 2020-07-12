@@ -9,7 +9,7 @@
 #define MASTER 0
 
 // #define DEBUG 1
-#define DEBUG 1
+#define DEBUG 0
 
 typedef struct process_args
 {
