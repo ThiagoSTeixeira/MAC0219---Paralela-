@@ -62,4 +62,11 @@ clean:
 
 .PHONY: compress
 compress:
-	$(COMPRESS) $(COMP_FILE) ./src EP2.pdf RelatorioEP2.ipynb Makefile *$(DATA)
+	$(COMPRESS)	 		\
+	$(COMP_FILE) 		\
+	run_experiments.py 	\
+	./src 				\
+	EP2.pdf 			\
+	RelatorioEP2.ipynb	\
+	Makefile			\
+	*$(DATA)
