@@ -167,7 +167,7 @@ void write_to_file()
 };
 
 
-void init_ompi_data(struct process_args *t_data, int n_process)
+void init_ompi_data(struct process_args *p_data, int n_process)
 {
     int IMAGE_SIZE = image_size;
     int vertical_chunk_size, lin;
@@ -230,7 +230,6 @@ __global__ void compute_mandelbrot(int start_x, int end_x, int start_y, int end_
     int i_y;
     int iteration;
     int pos;
-    // unsigned char *image_buffer_red, unsigned char *image_buffer_green, unsigned char *image_buffer_blue,
 
     i_x = start_x + blockIdx.x*blockDim.x+threadIdx.x;
     i_y = start_y + blockIdx.y*blockDim.y+threadIdx.y;
@@ -254,9 +253,9 @@ __global__ void compute_mandelbrot(int start_x, int end_x, int start_y, int end_
 
 }
 
-void cuda_compute_mandelbrot(process_args *process_data, int *result, int *result_counter) {
-    int start_x,start_y,end_x,end_y, counter;
-    int* result, *dev_result;
+void cuda_compute_mandelbrot(process_args *process_data, int **result, int *result_size) {
+    int start_x, start_y, end_x, end_y;
+    int *dev_result;
     start_y = process_data->start_y;
     end_y = process_data->end_y;
     start_x = process_data->start_x;
@@ -266,15 +265,15 @@ void cuda_compute_mandelbrot(process_args *process_data, int *result, int *resul
     dim3 dimGrid((int)ceil((end_x-start_x)/dimBlock.x),
                     (int)ceil((end_y-start_y)/dimBlock.y));
 
-    *result_counter = 3 * (end_x - start_x) * (end_y - start_y);
+    *result_size = 3 * (end_x - start_x) * (end_y - start_y);
 
-    result = (int *)malloc(result_counter * sizeof(int));
-    cudaMalloc((void**)&dev_result, result_counter * sizeof(int));
+    *result = (int *)malloc( (*result_size) * sizeof(int));
+    cudaMalloc((void**)&dev_result, (*result_size) * sizeof(int));
 
     compute_mandelbrot<<<dimGrid,dimBlock>>>(start_x, end_x, start_y,
         end_y, dev_result, c_x_min, c_y_min, pixel_width, pixel_height);
 
-    cudaMemcpy(result, dev_result, sizeof(int) * result_counter, cudaMemcpyDeviceToHost);
+    cudaMemcpy(*result, dev_result, (*result_size) * sizeof(int), cudaMemcpyDeviceToHost);
     cudaFree(dev_result);
 
 }
@@ -296,7 +295,7 @@ void compute_mandelbrot_ompi(int argc, char *argv[], int num_processes, int rank
                            &mpi_process_data_type);
     MPI_Type_commit(&mpi_process_data_type);
 
-    process_args *processes_data = NULL;
+    process_args *processes_args = NULL;
 
     if (rank_process == MASTER)
     {
@@ -305,11 +304,11 @@ void compute_mandelbrot_ompi(int argc, char *argv[], int num_processes, int rank
         each process needs to execute and then sends the data that each process
         will work on*/
 
-        processes_data =(process_args *) malloc(num_processes * sizeof(process_args));
-        init_ompi_data(processes_data, num_processes);
+        processes_args = (process_args *) malloc(num_processes * sizeof(process_args));
+        init_ompi_data(processes_args, num_processes);
 
         for (int p = 1; p < num_processes; p++)
-            MPI_Send(&processes_data[p], 1, mpi_process_data_type, p, 0,
+            MPI_Send(&processes_args[p], 1, mpi_process_data_type, p, 0,
                      MPI_COMM_WORLD);
     }
     else
@@ -317,17 +316,18 @@ void compute_mandelbrot_ompi(int argc, char *argv[], int num_processes, int rank
         if (DEBUG)
             printf("[%d]: initiated\n", rank_process);
             
-        int *result, counter;
-        process_args *process_data =(process_args *) malloc(sizeof(process_args));
+        int *result, result_size;
+        process_args *process_data = (process_args *) malloc(sizeof(process_args));
 
         MPI_Recv(process_data, 1, mpi_process_data_type, MASTER, 0, MPI_COMM_WORLD,
                  MPI_STATUS_IGNORE);
 
         if (DEBUG)
             printf("[%d]: received data\n", rank_process);
-        cuda_compute_mandelbrot(process_data, result, &counter);
+    
+        cuda_compute_mandelbrot(process_data, &result, &result_size);
 
-        MPI_Send(result, counter, MPI_INT, MASTER, 0, MPI_COMM_WORLD);
+        MPI_Send(result, result_size, MPI_INT, MASTER, 0, MPI_COMM_WORLD);
 
         if (DEBUG)
             printf("[%d]: finished computation\n", rank_process);
@@ -362,11 +362,11 @@ void compute_mandelbrot_ompi(int argc, char *argv[], int num_processes, int rank
             printf("[MASTER]: image buffer allocated\n");
 
         process_args *master_data = &processes_args[MASTER];
-        int *result, counter;
+        int *result, result_size;
 
-        cuda_compute_mandelbrot(master_data, result, &counter);
+        cuda_compute_mandelbrot(master_data, &result, &result_size);
 
-        counters[MASTER] = counter;
+        counters[MASTER] = result_size;
         results[MASTER] = result;
 
         for (int p = 0; p < num_processes; p++)
