@@ -85,6 +85,13 @@ void allocate_image_buffer()
     };
 };
 
+void free_image_buffer()
+{
+    for (int i = 0; i < image_buffer_size; i++)
+        free(image_buffer[i]);
+    free(image_buffer);
+}
+
 void init(int argc, char *argv[], int rank)
 {
     if (argc < 8)
@@ -305,7 +312,7 @@ void compute_mandelbrot_ompi(int argc, char *argv[], int num_processes, int rank
         each process needs to execute and then sends the data that each process
         will work on*/
 
-        processes_data =(process_args *) malloc(num_processes * sizeof(process_args));
+        processes_data = (process_args *) malloc(num_processes * sizeof(process_args));
         init_ompi_data(processes_data, num_processes);
 
         for (int p = 1; p < num_processes; p++)
@@ -318,7 +325,7 @@ void compute_mandelbrot_ompi(int argc, char *argv[], int num_processes, int rank
             printf("[%d]: initiated\n", rank_process);
             
         int *result, counter;
-        process_args *process_data =(process_args *) malloc(sizeof(process_args));
+        process_args *process_data = (process_args *) malloc(sizeof(process_args));
 
         MPI_Recv(process_data, 1, mpi_process_data_type, MASTER, 0, MPI_COMM_WORLD,
                  MPI_STATUS_IGNORE);
@@ -331,6 +338,9 @@ void compute_mandelbrot_ompi(int argc, char *argv[], int num_processes, int rank
 
         if (DEBUG)
             printf("[%d]: finished computation\n", rank_process);
+
+        free(process_args);
+        free(result);
     }
 
     if (rank_process == MASTER)
@@ -383,6 +393,11 @@ void compute_mandelbrot_ompi(int argc, char *argv[], int num_processes, int rank
         write_to_file();
         if (DEBUG)
             printf("[MASTER]: finished writing imagefile\n");
+        
+            free(processes_args);
+            free_image_buffer();
+            for (int p = 0; i < num_processes; i++)
+                free(results[p]);
     }
 
     MPI_Finalize();
