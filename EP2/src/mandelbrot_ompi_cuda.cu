@@ -339,7 +339,7 @@ void compute_mandelbrot_ompi(int argc, char *argv[], int num_processes, int rank
         if (DEBUG)
             printf("[%d]: finished computation\n", rank_process);
 
-        free(process_args);
+        free(process_data);
         free(result);
     }
 
@@ -396,7 +396,7 @@ void compute_mandelbrot_ompi(int argc, char *argv[], int num_processes, int rank
         
             free(processes_args);
             free_image_buffer();
-            for (int p = 0; i < num_processes; i++)
+            for (int p = 0; p < num_processes; p++)
                 free(results[p]);
     }
 
