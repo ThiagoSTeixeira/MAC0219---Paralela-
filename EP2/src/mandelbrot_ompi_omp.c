@@ -187,7 +187,7 @@ void compute_mandelbrot(process_args *process_args, int rank, int *result)
     int end_y = process_args->end_y;
     int start_x = process_args->start_x;
     int end_x = process_args->end_x;
-    int next = 0;
+    int pos;
 
     if (DEBUG)
         printf("[%d]: %d %d %d %d\n", rank, start_x, end_x, start_y, end_y);
@@ -201,7 +201,7 @@ void compute_mandelbrot(process_args *process_args, int rank, int *result)
         {
             c_y = 0.0;
         };
-#pragma omp parallel for private(z_x, z_y, z_x_squared, z_y_squared, c_x, iteration) schedule(dynamic) num_threads(n_threads)
+#pragma omp parallel for private(z_x, z_y, z_x_squared, z_y_squared, c_x, iteration, pos) schedule(dynamic) num_threads(n_threads)
         for (i_x = start_x; i_x < end_x; i_x++)
         {
             c_x = c_x_min + i_x * pixel_width;
@@ -222,9 +222,11 @@ void compute_mandelbrot(process_args *process_args, int rank, int *result)
                 z_x_squared = z_x * z_x;
                 z_y_squared = z_y * z_y;
             };
-            result[next++] = iteration;
-            result[next++] = i_x;
-            result[next++] = i_y;
+            pos = 3 * ((i_y - start_y) * (end_x - start_x) + i_x - start_x);
+
+            result[pos] = iteration;
+            result[pos + 1] = i_x;
+            result[pos + 2] = i_y;
         };
     };
 };
