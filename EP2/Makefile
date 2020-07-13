@@ -65,7 +65,7 @@ compress:
 	$(COMPRESS)	 		\
 	$(COMP_FILE) 		\
 	run_experiments.py 	\
-	./src 				\
+	src 				\
 	EP2.pdf 			\
 	RelatorioEP2.pdf	\
 	RelatorioEP2.ipynb	\
